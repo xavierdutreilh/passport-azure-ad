@@ -51,7 +51,7 @@ describe('token mock test', function() {
 	var success_user = '';
 	var success_info = '';
 
-	var beforeFunc = function(token, in_header, in_body, in_query) {
+	var beforeFunc = function(token, in_header, in_body, in_query, bad_header, lowercase_bearer) {
 		return function(done) {
 			chai.passport
 			  .use(strategy)
@@ -60,8 +60,14 @@ describe('token mock test', function() {
 		      	done();
 		      })
 		      .req(function(req) {
-		      	if (token && in_header)
-		      		req.headers.authorization = 'Bearer ' + token;
+		      	if (token && in_header) {
+		      		if (bad_header)
+			      		req.headers.authorization = token; // missing 'Bearer'
+			      	else if (lowercase_bearer)
+			      		req.headers.authorization = 'bearer' + token;
+			      	else
+			      		req.headers.authorization = 'Bearer' + token;
+		      	}
 		      	if (token && in_query) {
 		      		req.query = {};
 		      		req.query.access_token = token;
@@ -70,6 +76,9 @@ describe('token mock test', function() {
 		      		req.body = {};
 		      		req.body.access_token = token;
 		      	}
+                
+                // reset
+		      	challenge = success_user = success_info = '';
 		      })
 		      .success(function(user, info) { 
 		      	success_user = user.id; 
@@ -116,8 +125,32 @@ describe('token mock test', function() {
 		});
 	});
 
-	describe('should succeed with good token in query', function() {
+	describe('should fail with token passed in query', function() {
 		before(beforeFunc('good_token', false, false, true));
+
+		it('should fail', function() {
+			chai.expect(challenge).to.equal('access_token should be passed in request header or body. query is unsupported');
+		});
+	});
+
+	describe('should fail with token passed in both header and body', function() {
+		before(beforeFunc('good_token', true, true, false));
+
+		it('should fail', function() {
+			chai.expect(challenge).to.equal('access_token cannot be passed in both request header and body');
+		});
+	});
+
+	describe('should fail with bad header', function() {
+		before(beforeFunc('good_token', true, false, false, true));
+
+		it('should fail', function() {
+			chai.expect(challenge).to.equal('token is not found');
+		});
+	});
+
+	describe('should succeed with lower case bearer', function() {
+		before(beforeFunc('good_token', true, false, false, false, true));
 
 		it('should succeed', function() {
 			chai.expect(success_user).to.equal('Mr noname');
